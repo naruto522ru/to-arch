@@ -1,0 +1,214 @@
+#!/bin/bash
+# Converts a random Linux installation to Arch
+
+# crash early
+set -e
+
+export LANG=C
+
+# see https://archlinux.org/download/#download-mirrors
+MIRROR=https://mirror.yandex.ru/archlinux
+ARCH="/arch"
+OLD="/orig"
+
+TMZ=Moscow
+
+# check preconditions
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "Only Linux can be converted. Your system is $(uname -s)." >&2
+  exit 1
+fi
+
+if [ "$(uname -m)" != "x86_64" ]; then
+  echo "Only x86_64 is supported. Your system is $(uname -m)." >&2
+  exit 1
+fi
+
+if [ "$(whoami)" != "root" ]; then
+  echo "The script needs to be run as root. You are $(whoami)." >&2
+  exit 1
+fi
+
+for f in sed bsdtar busybox wget grep awk bash; do
+  which "${f}" >/dev/null || {
+    echo "${f} missing. Please install." >&2
+    exit 1
+  }
+done
+
+for f in sed tar grep awk bash; do
+  if [ "$(basename $(readlink -f $(which ${f})))" = "busybox" ]; then
+    echo "binary $(which $f) is from BusyBox, please install the real (GNU) version" >&2
+    exit 1
+  fi
+done
+
+RUNLEVEL=""
+which runlevel &>/dev/null && RUNLEVEL="$(runlevel | cut -d ' ' -f 2)"
+if [ -z "${RUNLEVEL}" ]; then
+  which rc-status &>/dev/null && RUNLEVEL="$(rc-status -r)"
+fi
+case "${RUNLEVEL}" in
+  S | unknown | single | 1)
+    ;;
+
+  *)
+    echo "Please run this script from single-user mode: init s or openrc single or append single to kernel cmd line" >&2
+    exit 1
+  ;;
+esac
+
+FREE=$(df -m / | sed '1d' | awk '{ print $4; }')
+MIN=4000
+if [ "${FREE}" -lt "${MIN}" ]; then
+  echo "No enough free disk space. Need ${MIN}K, there is only ${FREE}K" >&2
+  exit 1
+fi
+
+#ISO_DATE=2023.06.01
+##Auto detect last release Arch Linux tarball
+ISO_DATE=$(wget -t 3 -nv -4 ${MIRROR}/iso/ -qO - | grep -o 'href=".*">' | sed 's/href="//;s/\/">//' | grep $(date +"%Y.%m"))
+archive=archlinux-bootstrap-"$ISO_DATE"-x86_64.tar.zst
+if [ -z "${ISO_DATE}" ]; then
+  echo "Is the network up?" >&2
+  exit 1
+fi
+
+#echo "Installing Arch Linux base system into ${ARCH}. Old system will be moved to ${OLD}."
+mkdir "${ARCH}"
+mkdir "${OLD}"
+cd "${ARCH}"
+
+echo "Downloading Arch Linux tarball ${ISO_DATE}..."
+wget -qO- "$MIRROR/iso/$ISO_DATE/$archive"|bsdtar -px
+mv -f "${ARCH}"/root.x86_64/* "${ARCH}"/ && rm -vfr "${ARCH}"/root.x86_64/
+
+echo "Copying stuff from existing system:"
+# root password
+echo " - root password"
+sed '/^root:/ s|\*||' -i etc/shadow # passwordless login
+
+echo " - /usr/local"
+cp -ra /usr/local/* usr/local/ || true
+echo " - SSH keys"
+cp -a /etc/ssh/*key* etc/ssh || true
+echo " - kernel modules"
+cp -ra /lib/modules lib/ || true
+echo " - firmware"
+cp -ra /lib/firmware lib/ || true
+cp /etc/hosts etc/
+
+echo "Preparing chroot env"
+cp -L "/etc/resolv.conf" etc/ || cp -L /etc/resolv.conf etc/
+cp -L "/etc/localtime" etc/ || cp -L /etc/localtime etc/
+cp -L "/etc/fstab" etc/ || cp -L /etc/fstab etc/
+
+cp /usr/bin/busybox /tmp
+MYMV="/tmp/busybox mv"
+
+echo "Now switching over your installation!"
+DIRS="etc lib lib32 lib64 var usr sbin bin"
+cd /
+
+# FIXME deal with systems that mount /var/run tmpfs
+
+echo "moving to ${OLD}/:"
+[ -e /linuxrc ] && mv /linuxrc "${OLD}/"
+for d in ${DIRS}; do
+  echo " - ${d}"
+  [ -e "${d}" ] && ${MYMV} "${d}" "${OLD}/"
+done
+
+echo "replacing with Arch:"
+for d in ${DIRS}; do
+  echo " - ${d}"
+  [ -d "${ARCH}/${d}" ] && /tmp/busybox rm -f "./${d}" && ${MYMV} "${ARCH}/${d}" .
+done
+
+source /etc/profile
+hash -r
+
+echo "Cleaning up"
+rm -rf "/tmp/busybox"
+rm -rf "${ARCH}"
+rm -rf /*.*/
+rm -rf /home/*
+chsh -s /bin/bash
+echo "arch" > /etc/hostname
+
+echo " - pacman.conf"
+echo "Server = https://ftp.byfly.by/pub/archlinux/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
+echo "Server = https://america.mirror.pkgbuild.com/\$repo/os/\$arch" >> /etc/pacman.d/mirrorlist
+echo "Server = https://mirror.arizona.edu/archlinux/\$repo/os/\$arch" >> /etc/pacman.d/mirrorlist
+mkdir -pv /etc/pacman.d/hooks/
+cp -fv /etc/pacman.conf /etc/pacman.conf.bak
+sed -i 's/SigLevel.*/SigLevel = Never/' /etc/pacman.conf && sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 15/' /etc/pacman.conf && sed -i 's/#Color/Color/' /etc/pacman.conf && sed -i 's/CheckSpace/#CheckSpace/' /etc/pacman.conf
+pacman -Syy base base-devel net-tools --overwrite=/* --noconfirm --needed
+rm -rf /etc/pacman.d/gnupg/
+pacman-key --init
+echo 'Set keyserver'
+echo 'keyserver hkp://keyserver.ubuntu.com/' > /etc/pacman.d/gnupg/gpg.conf
+pacman-key --populate archlinux &>/dev/null
+mv -fv /etc/pacman.conf.bak /etc/pacman.conf
+sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 3/' /etc/pacman.conf && sed -i 's/#Color/Color/' /etc/pacman.conf
+pacman -Syy lostfiles openssh sudo man-db nano unzip git bash bash-completion mc openssh zip htop python-pip pacutils pacman-contrib sudo mtr strace gnu-netcat iftop bind cmake axel zsh vim reflector pacman-contrib git sudo debugedit fakeroot binutils bash --overwrite=/* --noconfirm --needed
+pacman -Syyu --overwrite=/* --noconfirm
+pacman -Syyw systemd efivar grub efibootmgr dosfstools linux linux-api-headers linux-firmware linux-firmware-whence linux-headers --noconfirm
+systemctl enable sshd
+echo "# See reflector --help for details.
+# Set the output path where the mirrorlist will be saved (--save).
+--save /etc/pacman.d/mirrorlist
+# Select the transfer protocol (--protocol).
+--protocol https
+# Use only the  most recently synchronized mirrors (--latest).
+--latest 5
+# Sort the mirrors by synchronization time (--sort).
+--sort rate" > /etc/xdg/reflector/reflector.conf
+##Create temp systems user
+useradd -m -g users -G log,systemd-journal,wheel,power,daemon -s /bin/bash build_pkg_container
+echo -e "temp_user\ntemp_user" | passwd build_pkg_container
+echo "build_pkg_container ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+cd /home/build_pkg_container/
+echo ' - install reflector2'
+sudo -u build_pkg_container git clone https://github.com/naruto522ru/reflector-fork.git reflector2 &>/dev/null
+cd /home/build_pkg_container/reflector2
+sudo -u build_pkg_container makepkg -scCrf --skippgpcheck --noconfirm
+pacman -U reflector2*.pkg.tar.zst --noconfirm
+cd /root && rm -rf /home/build_pkg_container/reflector2/
+cp -fv /etc/xdg/reflector/reflector.conf /etc/xdg/reflector2/reflector2.conf
+echo ' - yay AUR helper install'
+cd /home/build_pkg_container/
+sudo -u build_pkg_container git clone https://aur.archlinux.org/yay.git &>/dev/null
+cd /home/build_pkg_container/yay/
+pacman -S go --noconfirm --overwrite=/*
+sudo -u build_pkg_container makepkg -scC
+pacman -U yay*.pkg.tar.zst --noconfirm
+sudo -u build_pkg_container git clone https://github.com/sniptt-official/ots.git &>/dev/null
+cd ots
+sudo -u build_pkg_container go build -ldflags '-w -s'
+mv -v ./ots /usr/local/bin/
+chown -c root:root /usr/local/bin/ots
+cd ..
+rm -rf ./ots
+pacman -R go --noconfirm
+userdel -r build_pkg_container
+rm -rf /home/build_pkg_container/
+echo 'Time setting'
+ln -svf /usr/share/zoneinfo/Europe/${TMZ} /etc/localtime
+echo -e "en_US.UTF-8 UTF-8\nru_RU.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen
+echo "Configuring the system language"
+echo "LANG=ru_RU.UTF-8" > /etc/locale.conf
+echo -e "KEYMAP=ru\nFONT=cyr-sun16" > /etc/vconsole.conf
+echo "Enter password for ROOT"
+passwd root
+echo "Enter port for SSH"
+read ssh_port
+sed -i "s|#Port 22|Port $ssh_port|g" /etc/ssh/sshd_config
+echo "" >> /etc/ssh/sshd_config
+pacman -S neofetch --noconfirm &>/dev/null
+clear -x && neofetch
+pacman -Rcns neofetch --noconfirm &>/dev/null
+echo "Your old system is in ${OLD}. Remove manually."
+echo "Keeping your kernel and /boot. Please review..."
+echo "DONE! You should reboot now."

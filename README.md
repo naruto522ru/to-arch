@@ -1,15 +1,15 @@
-# to-gentoo
+# to-arch
 
 To run it:
-`bash <(curl -Ss 'https://raw.githubusercontent.com/oglueck/to-gentoo/master/to-gentoo')`
+`bash <(curl -Ss 'https://raw.githubusercontent.com/naruto522ru/to-arch/master/to-arch')`
 
-to-gentoo is a bash script that you can run on any pre-installed Linux distribution. It will replace the current system with a basic Gentoo system. If all goes well you have a fully working Gentoo system when the script finishes without even rebooting.
+to-arch is a bash script that you can run on any pre-installed Linux distribution. It will replace the current system with a basic Arch system. If all goes well you have a fully working Arch Linux system when the script finishes without even rebooting.
 
-The basic Gentoo system is first installed in a subdirectory (/gentoo). When finished, your existing system is moved to an different subdirectory (/orig) and the Gentoo system is moved to the root filesystem.
+The basic Arch system is first installed in a subdirectory (/arch). When finished, your existing system is moved to an different subdirectory (/orig) and the Arch system is moved to the root filesystem.
 
 Some files are not touched by this script however.
 
-In fact only the following directories will be replaced with the Gentoo versions:
+In fact only the following directories will be replaced with the Arch Linux versions:
 - etc
 - lib (lib32, lib64)
 - var
@@ -25,7 +25,7 @@ Specifically the following directories will not be touched and will be kept:
 - /mnt
 - all technical directories: /dev, /proc, /sys, /tmp
 
-To make transition a bit smoother, the following things will be kept / migrated to Gentoo:
+To make transition a bit smoother, the following things will be kept / migrated to Arch:
 - bootloader, the kernel and its modules in /lib/modules
 - firmware in /lib/firmware (you can replace it with sys-kernel/linux-firmware later)
 - file system layout and /etc/fstab
@@ -38,13 +38,13 @@ To make transition a bit smoother, the following things will be kept / migrated 
 
 Preconditions:
 - a modern x86\_64 Linux in single-user mode
-- about 8GB of free space on the / filesystem
+- about 4GB of free space on the / filesystem
 - Internet connection
 
-How basic is the installed Gentoo system?
+How basic is the installed Arch system?
 A current Stage-3 system with current Portage repository is installed. So it is quite uptodate and can easily be brought to a fully patched level by running: 
 ```
-emerge -uavD world
+pacman -Syyu --noconfirm
 ```
 Where to continue the installation?
 You can simply continue working through the [Gentoo Handbook](https://wiki.gentoo.org/wiki/Handbook:AMD64/Full/Installation#Choosing_the_right_profile) where Portage is configured and a profile is chosen.
@@ -57,4 +57,4 @@ What are the essential tasks?
 - free up space by removing the old system
 
 When something goes wrong
-In the worst case the script will fail in a state where your system has (partially) been moved to /orig or /gentoo has partially been moved to the root filesystem. In that case the system is not functional. Boot from [System Rescue CD](https://www.system-rescue-cd.org), mount the root filesystem and move the folders back in place manually. Then reboot.
+In the worst case the script will fail in a state where your system has (partially) been moved to /orig or /arch has partially been moved to the root filesystem. In that case the system is not functional. Boot from [System Rescue](www.system-rescue.org), mount the root filesystem and move the folders back in place manually. Then reboot.
