@@ -1,7 +1,7 @@
 # to-arch
 
 To run it:
-`bash <(curl -Ss 'https://raw.githubusercontent.com/naruto522ru/to-arch/master/to-arch')`
+`bash <(curl -Ss 'https://raw.githubusercontent.com/you-oops-dev/to-arch/master/to-arch')`
 
 to-arch is a bash script that you can run on any pre-installed Linux distribution. It will replace the current system with a basic Arch system. If all goes well you have a fully working Arch Linux system when the script finishes without even rebooting.
 

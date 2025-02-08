@@ -10,7 +10,7 @@ export LANG=C
 MIRROR=https://mirror.yandex.ru/archlinux
 ARCH="/arch"
 OLD="/orig"
-NAME_ACCOUNT_GITHUB=naruto522ru
+NAME_ACCOUNT_GITHUB=you-oops-dev
 
 TMZ=Moscow
 
