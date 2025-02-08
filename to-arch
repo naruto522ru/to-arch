@@ -10,6 +10,7 @@ export LANG=C
 MIRROR=https://mirror.yandex.ru/archlinux
 ARCH="/arch"
 OLD="/orig"
+NAME_ACCOUNT_GITHUB=naruto522ru
 
 TMZ=Moscow
 
@@ -170,7 +171,7 @@ echo -e "temp_user\ntemp_user" | passwd build_pkg_container
 echo "build_pkg_container ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 cd /home/build_pkg_container/
 echo ' - install reflector2'
-sudo -u build_pkg_container git clone https://github.com/naruto522ru/reflector-fork.git reflector2 &>/dev/null
+sudo -u build_pkg_container git clone https://github.com/${NAME_ACCOUNT_GITHUB}/reflector-fork.git reflector2 &>/dev/null
 cd /home/build_pkg_container/reflector2
 sudo -u build_pkg_container makepkg -scCrf --skippgpcheck --noconfirm
 pacman -U reflector2*.pkg.tar.zst --noconfirm
